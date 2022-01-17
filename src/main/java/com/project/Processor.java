@@ -1,5 +1,6 @@
 package com.project;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
 import java.util.function.Consumer;
@@ -11,38 +12,43 @@ public class Processor {
     private final TreeMap<Integer, Integer> bid = new TreeMap();
     private final TreeMap<Integer, Integer> ask = new TreeMap();
 
-    void process(Supplier<String> source, Consumer<String> drain) {
+    public void process(Supplier<String> source, Consumer<String> drain) {
         while (true) {
             String line = source.get();
             if (Objects.isNull(line)) {
                 break;
             }
+            if(line.length() == 0){
+                break;
+            }
             char commandType = line.charAt(0);
+            String[] splitLine = line.split(SPLIT_REGEX);
             switch (commandType) {
                 case 'q':
-                    drain.accept(queryProcess(line));
+                    drain.accept(queryProcess(splitLine));
                     break;
                 case 'u':
-                    updateProcess(line);
+                    updateProcess(splitLine);
                     break;
                 case 'o':
-                    orderProcess(line);
+                    orderProcess(splitLine);
                     break;
             }
         }
     }
 
-    private void updateProcess(String line) {
-        String[] words = line.split(SPLIT_REGEX);
-        int price = Integer.parseInt(words[1]);
-        int size = Integer.parseInt(words[2]);
-        if (words[3].equals("bid")) {
+    //u,11,5,ask
+    private void updateProcess(String[] splitLine) {
+        int price = Integer.parseInt(splitLine[1]);
+        int size = Integer.parseInt(splitLine[2]);
+        String command = splitLine[3];
+        if ("bid".equals(command)) {
             if (size == 0) {
                 bid.remove(price);
             } else {
                 bid.put(price, size);
             }
-        } else if (words[3].equals("ask")) {
+        } else if ("ask".equals(command)) {
             if (size == 0) {
                 ask.remove(price);
             } else {
@@ -51,69 +57,70 @@ public class Processor {
         }
     }
 
-    private String queryProcess(String line) {
+    //q,best_bid
+    private String queryProcess(String[] splitLine) {
         StringBuilder sb = new StringBuilder();
-        String[] words = line.split(SPLIT_REGEX);
-        switch (words[1]) {
+        String command = splitLine[1];
+        switch (command) {
             case "best_bid":
-                sb.append(bid.lastKey())
+                int lastKey = bid.lastKey();
+                sb.append(lastKey)
                         .append(",")
-                        .append(bid.getOrDefault(bid.lastKey(), 0));
+                        .append(bid.getOrDefault(lastKey, 0));
                 break;
             case "best_ask":
-                sb.append(ask.firstKey())
+                int firstKey = ask.lastKey();
+                sb.append(firstKey)
                         .append(",")
-                        .append(ask.getOrDefault(ask.firstKey(), 0));
+                        .append(ask.getOrDefault(firstKey, 0));
                 break;
             case "size":
-                int size = Integer.parseInt(words[2]);
-                if (Objects.nonNull(bid.get(size))) {
-                    sb.append(bid.get(size));
-                }
-                if (Objects.nonNull(ask.get(size))) {
-                    sb.append(ask.get(size));
-                }
+                int price = Integer.parseInt(splitLine[2]);
+                sb.append(bid.getOrDefault(price, 0) + ask.getOrDefault(price, 0));
                 break;
         }
         return sb.toString();
     }
 
-    private void orderProcess(String line) {
-        String[] splitLine = line.split(SPLIT_REGEX);
-        if (splitLine[1].equals("sell")) {
+    private void orderProcess(String[] splitLine) {
+        String command = splitLine[1];
+        if ("sell".equals(command)) {
             sell(splitLine);
-        } else if (splitLine[1].equals("buy")) {
+        } else if ("buy".equals(command)) {
             buy(splitLine);
         }
     }
 
-    private void sell(String[] arrays) {
-        int sizeShares = Integer.parseInt(arrays[2]);
-        while (sizeShares != 0) {
-            int lastKey = bid.lastKey();
-            if (bid.get(lastKey) <= sizeShares) {
-                sizeShares -= bid.get(lastKey);
+    //o,sell,1
+    private void sell(String[] parts) {
+        int sizeShares = Integer.parseInt(parts[2]);
+        while (sizeShares > 0) {
+            Map.Entry<Integer, Integer> lastEntry = bid.lastEntry();
+            int lastKey = lastEntry.getKey();
+            if (lastEntry.getValue() <= sizeShares) {
+                sizeShares -= lastEntry.getValue() ;
                 bid.remove(lastKey);
             } else {
-                bid.put(lastKey, bid.get(lastKey) - sizeShares);
+                bid.put(lastKey, lastEntry.getValue() - sizeShares);
                 sizeShares = 0;
             }
         }
     }
 
-    private void buy(String[] arrays) {
-        int sizeShares = Integer.parseInt(arrays[2]);
-        while (sizeShares != 0) {
-            int firstKey = ask.firstKey();
-            if (ask.get(firstKey) <= sizeShares) {
-                sizeShares -= ask.get(firstKey);
+
+    private void buy(String[] parts) {
+        int sizeShares = Integer.parseInt(parts[2]);
+        while (sizeShares > 0) {
+            Map.Entry<Integer, Integer> firstEntry = ask.firstEntry();
+            int firstKey = firstEntry.getKey();
+            if (firstEntry.getValue() <= sizeShares) {
+                sizeShares -= firstEntry.getValue() ;
                 ask.remove(firstKey);
             } else {
-                ask.put(firstKey, ask.get(firstKey) - sizeShares);
+                ask.put(firstKey, firstEntry.getValue() - sizeShares);
                 sizeShares = 0;
             }
         }
     }
-
 
 }
